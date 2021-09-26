@@ -1,0 +1,185 @@
+---
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# A Desparate Attempt to Understand {gtable} and {grid}
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+## References
+
+* [(Unofficial) overview of gtable](https://cran.r-project.org/web/packages/gridExtra/vignettes/gtable.html)
+* [gtable](https://gtable.r-lib.org/)
+* [Getting to Know grid Graphics by Paul Murrell (UseR! 2015)](https://www.stat.auckland.ac.nz/~paul/useR2015-grid/grid-slides.html)
+
+## gtable
+
+`ggplot` object can be plotted.
+
+```{r plot}
+library(ggplot2)
+
+d <- data.frame(x = 1:2, y = 2:3)
+p <- ggplot(d, aes(x, y)) +
+  geom_point()
+
+p
+```
+
+`ggplot` object can be converted into a `gtable` by `ggplotGrob()`.
+
+```{r ggplotGrob}
+gt <- ggplotGrob(p)
+
+class(gt)
+```
+
+A `gtable` can be plotted by `grid.draw()` (or `plot()`)
+
+```{r plot_gtable}
+library(grid)
+
+grid.draw(gt)
+```
+
+This is done by `grid.draw.gTree()` provided by grid package; there's no such
+method as `grid.draw.gtable()`. That is, a `gtable` object is just a `gTree`.
+
+```{r check_dispatch}
+sloop::s3_dispatch(grid.draw(gt))
+```
+
+
+If we `print()` a `gtable` object instead of `plot()`ing, we can get the table of the content.
+
+```{r gtable}
+print(gt)
+```
+
+`gtable_show_layout()` visualize the layout.
+
+```{r gtable_show_layout}
+gtable::gtable_show_layout(gt, newpage = FALSE)
+```
+
+
+As its document says, `gtable_show_layout()` is
+
+> a simple wrapper around `grid::grid.show.layout()` that allows you to inspect the layout of the gtable.
+
+It calls `grid.layout()` with the size information of each components.
+
+```{r inside_gtable_show_layout}
+gtable::gtable_show_layout
+
+gtable:::gtable_layout
+```
+
+### Get a component from gtable
+
+[As `gtable_filter()` does](https://github.com/r-lib/gtable/blob/0fc53e08f81eb5c9c18ebfbb832ff979c5eb9f01/R/filter.r#L37),
+we can specify the index of a component by `<gtable>$layout` and subset `<gtable>$grobs`
+by that index.
+
+```{r gtable_filter}
+# This is a data.frame
+gt$layout
+
+idx <- which(gt$layout$name == "panel")
+
+stopifnot(length(idx) == 1L)
+
+g_panel <- gt$grobs[[idx]]
+
+g_panel
+```
+
+### Modify a component
+
+Now that we grasped the panel's grob, let's replace it with an empty grob and draw it.
+
+```{r}
+rect <- rectGrob(gp = gpar(col = "red"))
+e <- new.env(parent = emptyenv())
+
+# show the viewport
+class(rect) <- c("spyRect", class(rect))
+makeContent.spyRect <- function(x) {
+  vp <- current.viewport()
+  e$vp <- vp$name
+  
+  message("I'm here! ", vp$name)
+  
+  # Remove spyRect class
+  class(x) <- class(x)[-1]
+  grid::makeContent(x)
+}
+
+registerS3method("makeContent", "spyRect", makeContent.spyRect)
+
+gt$grobs[[idx]] <- rect
+
+grid.draw(gt)
+```
+
+Then, move to that viewport (to return to the top viewport, use `popViewport(0)`).
+
+```{r fig.show='hide'}
+# This isn't needed on the interactive session.
+grid.draw(gt)
+
+downViewport(e$vp)
+```
+
+We can confirm our location by the following function is useful.
+
+```{r eval=FALSE}
+# pak::pkg_install("yutannihilation/gridutils")
+library(gridutils)
+
+gu_you_are_here()
+```
+
+Then, plot the grob to get the same plot.
+
+```{r}
+# This isn't needed on the interactive session.
+grid.draw(gt)
+downViewport(e$vp)
+
+grid.draw(g_panel)
+```
+
+Why did I do such a thing? Well, this way we can modify the grob directly.
+
+For example, tweak the x and y directly.
+
+```{r}
+# This isn't needed on the interactive session.
+grid.draw(gt)
+downViewport(e$vp)
+
+# original values
+g_panel$children[[3]][c("x", "y")]
+
+i <- 1
+g_panel$children[[3]]$x <- unit(0.5 + (1 / 3:4) * sin(2 * pi * i / 20), units = "native")
+g_panel$children[[3]]$y <- unit(0.5 + (1 / 3:4) * cos(2 * pi * i / 20), units = "native")
+
+grid.draw(g_panel)
+```
+
+Or, plot only the panel to raster and add some fx on it?
+
