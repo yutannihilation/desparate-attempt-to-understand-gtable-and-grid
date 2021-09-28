@@ -89,7 +89,7 @@ print(gt)
 #> 18 17 ( 2- 2, 2- 2)        tag              zeroGrob[plot.tag..zeroGrob.73]
 ```
 
-`gtable_show_layout()` visualize the layout.
+`gtable_show_layout()` visualizes the layout.
 
 ``` r
 gtable::gtable_show_layout(gt, newpage = FALSE)
@@ -112,7 +112,7 @@ gtable::gtable_show_layout
 #>         stop("x must be a gtable", call. = FALSE)
 #>     grid.show.layout(gtable_layout(x), ...)
 #> }
-#> <bytecode: 0x55c926b9f0f0>
+#> <bytecode: 0x55f59d87baa0>
 #> <environment: namespace:gtable>
 gtable:::gtable_layout
 #> function (x) 
@@ -122,7 +122,7 @@ gtable:::gtable_layout
 #>     grid.layout(nrow = length(x$heights), heights = x$heights, 
 #>         ncol = length(x$widths), widths = x$widths, respect = x$respect)
 #> }
-#> <bytecode: 0x55c92aedcf00>
+#> <bytecode: 0x55f5a2455cb0>
 #> <environment: namespace:gtable>
 ```
 
@@ -199,7 +199,7 @@ grid.draw(gt)
 ![](README_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 Then, move to that viewport (to return to the top viewport, use
-`popViewport(0)`).
+`upViewport(0)`).
 
 ``` r
 # This isn't needed on the interactive session.
@@ -209,7 +209,7 @@ grid.draw(gt)
 downViewport(e$vp)
 ```
 
-We can confirm our location by the following function is useful.
+We can confirm our location by the following function.
 
 ``` r
 # pak::pkg_install("yutannihilation/gridutils")
@@ -238,12 +238,32 @@ directly.
 For example, tweak the x and y directly.
 
 ``` r
+# helper
+cpp11::cpp_source(
+  code = '
+#include <cpp11/R.hpp>
+#include <R_ext/GraphicsEngine.h>
+
+[[cpp11::register]] void
+newpage() {
+  pGEDevDesc dd = GEcurrentDevice();
+  R_GE_gcontext gc;
+  GENewPage(&gc, dd);
+}
+')
+```
+
+``` r
 # This isn't needed on the interactive session.
 grid.draw(gt)
 #> I'm here! panel.7-5-7-5
 #> I'm here! panel.7-5-7-5
 downViewport(e$vp)
+```
 
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+``` r
 # original values
 g_panel$children[[3]][c("x", "y")]
 #> $x
@@ -251,13 +271,28 @@ g_panel$children[[3]][c("x", "y")]
 #> 
 #> $y
 #> [1] 0.0454545454545455native 0.954545454545455native
-i <- 1
-g_panel$children[[3]]$x <- unit(0.5 + (1 / 3:4) * sin(2 * pi * i / 20), units = "native")
-g_panel$children[[3]]$y <- unit(0.5 + (1 / 3:4) * cos(2 * pi * i / 20), units = "native")
+dev.copy(ragg::agg_png, filename = "tmp%03d.png")
+#> I'm here! panel.7-5-7-5
+#> I'm here! panel.7-5-7-5
+#> agg_png 
+#>       3
+for (i in 1:10) {
+  newpage()
+  
+  g_panel$children[[3]]$x <- unit(0.5 + (1 / 3:4) * sin(2 * pi * i / 20), units = "native")
+  g_panel$children[[3]]$y <- unit(0.5 + (1 / 3:4) * cos(2 * pi * i / 20), units = "native")
+  
+  grid.draw(g_panel)
+}
 
-grid.draw(g_panel)
+dev.off()
+#> png 
+#>   2
+gifski::gifski(list.files(".", pattern = "tmp.*\\.png"), "ani.gif")
+#> [1] "ani.gif"
+knitr::include_graphics("ani.gif")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](ani.gif)<!-- -->
 
 Or, plot only the panel to raster and add some fx on it?

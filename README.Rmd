@@ -68,7 +68,7 @@ If we `print()` a `gtable` object instead of `plot()`ing, we can get the table o
 print(gt)
 ```
 
-`gtable_show_layout()` visualize the layout.
+`gtable_show_layout()` visualizes the layout.
 
 ```{r gtable_show_layout}
 gtable::gtable_show_layout(gt, newpage = FALSE)
@@ -134,7 +134,7 @@ gt$grobs[[idx]] <- rect
 grid.draw(gt)
 ```
 
-Then, move to that viewport (to return to the top viewport, use `popViewport(0)`).
+Then, move to that viewport (to return to the top viewport, use `upViewport(0)`).
 
 ```{r fig.show='hide'}
 # This isn't needed on the interactive session.
@@ -143,7 +143,7 @@ grid.draw(gt)
 downViewport(e$vp)
 ```
 
-We can confirm our location by the following function is useful.
+We can confirm our location by the following function.
 
 ```{r eval=FALSE}
 # pak::pkg_install("yutannihilation/gridutils")
@@ -167,6 +167,24 @@ Why did I do such a thing? Well, this way we can modify the grob directly.
 For example, tweak the x and y directly.
 
 ```{r}
+# helper
+cpp11::cpp_source(
+  code = '
+#include <cpp11/R.hpp>
+#include <R_ext/GraphicsEngine.h>
+
+[[cpp11::register]] void
+newpage() {
+  pGEDevDesc dd = GEcurrentDevice();
+  R_GE_gcontext gc;
+  GENewPage(&gc, dd);
+}
+')
+
+```
+
+
+```{r}
 # This isn't needed on the interactive session.
 grid.draw(gt)
 downViewport(e$vp)
@@ -174,11 +192,21 @@ downViewport(e$vp)
 # original values
 g_panel$children[[3]][c("x", "y")]
 
-i <- 1
-g_panel$children[[3]]$x <- unit(0.5 + (1 / 3:4) * sin(2 * pi * i / 20), units = "native")
-g_panel$children[[3]]$y <- unit(0.5 + (1 / 3:4) * cos(2 * pi * i / 20), units = "native")
+dev.copy(ragg::agg_png, filename = "tmp%03d.png")
 
-grid.draw(g_panel)
+for (i in 1:10) {
+  newpage()
+  
+  g_panel$children[[3]]$x <- unit(0.5 + (1 / 3:4) * sin(2 * pi * i / 20), units = "native")
+  g_panel$children[[3]]$y <- unit(0.5 + (1 / 3:4) * cos(2 * pi * i / 20), units = "native")
+  
+  grid.draw(g_panel)
+}
+
+dev.off()
+
+gifski::gifski(list.files(".", pattern = "tmp.*\\.png"), "ani.gif")
+knitr::include_graphics("ani.gif")
 ```
 
 Or, plot only the panel to raster and add some fx on it?
